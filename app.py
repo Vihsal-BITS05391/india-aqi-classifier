@@ -56,7 +56,7 @@ st.sidebar.caption("The CSV needs these columns: " + ", ".join(FEATURES) +
 
 model = load_model(MODEL_FILES[model_name])
 
-tab1 = st.tabs(["Evaluate on test data"])
+tab1, tab2, tab3 = st.tabs(["Evaluate on test data", "Try one reading", "Model comparison"])
 
 # tab 1: upload a csv and see metrics
 with tab1:
@@ -113,3 +113,58 @@ with tab1:
             out["Predicted_" + TARGET] = pred_text
             st.subheader("Predictions")
             st.dataframe(out.head(100))
+
+# tab 2: single reading
+with tab2:
+    st.write("Enter pollutant values (in micrograms per cubic metre, CO in mg per cubic metre).")
+    defaults = {"PM2.5": 80.0, "PM10": 150.0, "NO": 15.0, "NO2": 35.0, "NOx": 40.0,
+                "NH3": 20.0, "CO": 1.2, "SO2": 12.0, "O3": 35.0, "Benzene": 2.0,
+                "Toluene": 5.0, "Xylene": 1.5}
+    values = {}
+    cols = st.columns(4)
+    for i, f in enumerate(FEATURES):
+        with cols[i % 4]:
+            if f == "Month":
+                values[f] = st.number_input("Month (1 to 12)", 1, 12, 11)
+            else:
+                values[f] = st.number_input(f, min_value=0.0, value=defaults[f])
+
+    if st.button("Predict AQI category"):
+        row = pd.DataFrame([values])[FEATURES]
+        p = model.predict(row)[0]
+        probs = model.predict_proba(row)[0]
+        st.success("Predicted category: " + encoder.inverse_transform([p])[0])
+        st.bar_chart(pd.Series(probs, index=encoder.classes_))
+
+# tab 3: all five models on the same data
+# runs only predict on the saved models, nothing is retrained here.
+# cached so it does not run again on every click in the sidebar
+@st.cache_data
+def compare_all_models(df):
+    y_all = encoder.transform(df[TARGET])
+    rows = []
+    for m_name, m_file in MODEL_FILES.items():
+        m = load_model(m_file)
+        m_pred = m.predict(df[FEATURES])
+        m_prob = m.predict_proba(df[FEATURES])
+        sc = get_metrics(y_all, m_pred, m_prob)
+        sc["ML Model Name"] = m_name
+        rows.append(sc)
+    return pd.DataFrame(rows).set_index("ML Model Name").round(4)
+
+
+with tab3:
+    st.write("All five saved models run on the data from the first tab.")
+    if data is not None and all(c in data.columns for c in FEATURES + [TARGET]):
+        comp = compare_all_models(data)
+        st.dataframe(comp)
+        st.caption("Best model by MCC on this data: " + comp["MCC"].idxmax())
+    else:
+        st.warning("Upload a CSV with all feature columns and the " + TARGET +
+                   " column to compare the models.")
+
+    # the table that was saved when train_models.py was run
+    path = os.path.join(MODEL_DIR, "metrics.csv")
+    if os.path.exists(path):
+        st.subheader("Saved results from the training run")
+        st.dataframe(pd.read_csv(path))
