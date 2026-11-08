@@ -68,3 +68,43 @@ print(y_text.value_counts())
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=RANDOM_STATE, stratify=y)
 print("\nTrain size:", X_train.shape, " Test size:", X_test.shape)
+
+models = {
+    "Logistic Regression": LogisticRegression(max_iter=1000, random_state=RANDOM_STATE),
+    "Decision Tree": DecisionTreeClassifier(max_depth=10, random_state=RANDOM_STATE),
+}
+
+results = []
+
+for name, clf in models.items():
+    print("\nTraining", name, "...")
+    pipe = Pipeline([
+        ("imputer", SimpleImputer(strategy="median")),
+        ("scaler", StandardScaler()),
+        ("model", clf),
+    ])
+    pipe.fit(X_train, y_train)
+
+    y_pred = pipe.predict(X_test)
+    y_prob = pipe.predict_proba(X_test)
+
+    scores = get_metrics(y_test, y_pred, y_prob)
+    scores["ML Model Name"] = name
+    results.append(scores)
+    print({k: round(v, 4) for k, v in scores.items() if k != "ML Model Name"})
+
+    # save the trained pipeline, file name like logistic_regression.joblib
+    file_name = name.lower().replace(" ", "_") + ".joblib"
+    joblib.dump(pipe, os.path.join(MODEL_DIR, file_name))
+
+    # confusion matrix picture for the report
+    cm = confusion_matrix(y_test, y_pred, labels=range(len(BUCKET_ORDER)))
+    plt.figure(figsize=(6, 5))
+    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
+                xticklabels=encoder.classes_, yticklabels=encoder.classes_)
+    plt.title("Confusion matrix: " + name)
+    plt.xlabel("Predicted")
+    plt.ylabel("Actual")
+    plt.tight_layout()
+    plt.savefig(os.path.join(MODEL_DIR, "cm_" + file_name.replace(".joblib", ".png")), dpi=120)
+    plt.close()
