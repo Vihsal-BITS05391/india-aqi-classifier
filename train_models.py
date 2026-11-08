@@ -72,6 +72,10 @@ print("\nTrain size:", X_train.shape, " Test size:", X_test.shape)
 models = {
     "Logistic Regression": LogisticRegression(max_iter=1000, random_state=RANDOM_STATE),
     "Decision Tree": DecisionTreeClassifier(max_depth=10, random_state=RANDOM_STATE),
+    "KNN": KNeighborsClassifier(n_neighbors=7),
+    "Naive Bayes": GaussianNB(),
+    # probability=True is needed for the AUC score, it makes SVM slower to train
+    "Support Vector Machine": SVC(kernel="rbf", probability=True, random_state=RANDOM_STATE),
 }
 
 results = []
@@ -108,3 +112,19 @@ for name, clf in models.items():
     plt.tight_layout()
     plt.savefig(os.path.join(MODEL_DIR, "cm_" + file_name.replace(".joblib", ".png")), dpi=120)
     plt.close()
+
+# 5. save the comparison table, the label encoder and the test file
+table = pd.DataFrame(results)[["ML Model Name", "Accuracy", "AUC", "Precision",
+                               "Recall", "F1", "MCC"]]
+table = table.round(4)
+table.to_csv(os.path.join(MODEL_DIR, "metrics.csv"), index=False)
+joblib.dump(encoder, os.path.join(MODEL_DIR, "label_encoder.joblib"))
+
+# test_data.csv is the untouched 20 percent. It has the original text label,
+# so it can be uploaded directly in the streamlit app.
+test_out = X_test.copy()
+test_out[TARGET] = encoder.inverse_transform(y_test)
+test_out.to_csv("test_data.csv", index=False)
+
+print("\n===== Comparison table =====")
+print(table.to_string(index=False))
